@@ -130,6 +130,9 @@ public sealed class TrayIcon : IDisposable
 
     private void Add()
     {
+        var deleteStale = BuildData(NIF_GUID);
+        Shell_NotifyIconW(NIM_DELETE, ref deleteStale);
+
         var data = BuildData(NIF_MESSAGE | NIF_ICON | NIF_TIP | NIF_SHOWTIP | NIF_GUID);
         Shell_NotifyIconW(NIM_ADD, ref data);
         _added = true;
