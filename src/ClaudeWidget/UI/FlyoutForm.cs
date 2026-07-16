@@ -1,5 +1,6 @@
 using System.Drawing;
 using System.Drawing.Drawing2D;
+using System.Drawing.Text;
 using ClaudeWidget.Core;
 using Microsoft.Win32;
 
@@ -15,11 +16,13 @@ public sealed class FlyoutForm : Form
     private Point _dragStartScreenPoint;
     private Point _dragStartFormLocation;
 
+    private const int BoxPadding = 16;
+
     private bool _pinned;
-    private static readonly Rectangle PinRect = new(312, 8, 20, 20);
+    private static readonly Rectangle PinRect = new(322, 12, 22, 22);
 
     private bool _refreshing;
-    private static readonly Rectangle RefreshRect = new(288, 8, 20, 20);
+    private static readonly Rectangle RefreshRect = new(288, 12, 22, 22);
 
     public event Action? RefreshRequested;
     public event Action<Point>? PositionChanged;
@@ -43,7 +46,7 @@ public sealed class FlyoutForm : Form
         ShowInTaskbar = false;
         TopMost = true;
         StartPosition = FormStartPosition.Manual;
-        ClientSize = new Size(340, 170);
+        ClientSize = new Size(360, 210);
         BackColor = _back;
         DoubleBuffered = true;
     }
@@ -134,9 +137,9 @@ public sealed class FlyoutForm : Form
         using var borderPen = new Pen(_border);
 
         g.DrawRectangle(borderPen, 0, 0, Width - 1, Height - 1);
-        g.DrawString("Claude Usage", titleFont, fore, 16, 12);
+        g.DrawString("Claude Usage", titleFont, fore, BoxPadding, 14);
 
-        using var iconFont = new Font("Segoe MDL2 Assets", 11f);
+        using var iconFont = new Font(IconFontFamily, 12f);
         using var iconFormat = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
         var pinGlyph = _pinned ? ((char)0xE840).ToString() : ((char)0xE718).ToString();
         g.DrawString(pinGlyph, iconFont, fore, PinRect, iconFormat);
@@ -144,38 +147,41 @@ public sealed class FlyoutForm : Form
         var refreshColor = _refreshing ? dim : fore;
         g.DrawString(((char)0xE72C).ToString(), iconFont, refreshColor, RefreshRect, iconFormat);
 
+        var textWidth = Width - BoxPadding * 2;
         if (_authError)
         {
-            g.DrawString("Not signed in — Claude Code credentials not found.", font, fore, 16, 52);
-            g.DrawString("Log in with Claude Code, then click Refresh now.", font, dim, 16, 74);
+            g.DrawString("Not signed in — Claude Code credentials not found.", font, fore,
+                new RectangleF(BoxPadding, 56, textWidth, 40));
+            g.DrawString("Log in with Claude Code, then click Refresh now.", font, dim,
+                new RectangleF(BoxPadding, 96, textWidth, 40));
             return;
         }
         if (_snapshot is null)
         {
-            g.DrawString("Waiting for first update…", font, fore, 16, 52);
+            g.DrawString("Waiting for first update…", font, fore, new RectangleF(BoxPadding, 56, textWidth, 40));
             return;
         }
 
         var now = DateTimeOffset.UtcNow;
         DrawRow(g, "Session", _snapshot.SessionPercent,
             $"resets in {Formatting.Countdown(_snapshot.SessionResetsAtUtc, now)}",
-            48, font, smallFont, fore, dim);
+            56, font, smallFont, fore, dim);
         DrawRow(g, "Weekly", _snapshot.WeeklyPercent,
             $"resets {Formatting.AbsoluteLocal(_snapshot.WeeklyResetsAtUtc)}",
-            92, font, smallFont, fore, dim);
+            116, font, smallFont, fore, dim);
 
         var source = _snapshot.Source == UsageSource.UsageEndpoint ? "usage endpoint" : "probe";
         var staleTag = _stale ? " · STALE" : "";
         g.DrawString(
             $"Updated {_snapshot.FetchedAtUtc.ToLocalTime():HH:mm:ss} · {source}{staleTag}",
-            smallFont, dim, 16, 138);
+            smallFont, dim, BoxPadding, 176);
     }
 
     private void DrawRow(Graphics g, string label, double? percent, string resetText, int y,
         Font font, Font smallFont, Brush fore, Brush dim)
     {
-        g.DrawString(label, font, fore, 16, y);
-        var bar = new Rectangle(84, y + 4, 150, 12);
+        g.DrawString(label, font, fore, BoxPadding, y);
+        var bar = new Rectangle(84, y + 5, 150, 14);
         using (var back = new SolidBrush(_barBack))
         {
             g.FillRectangle(back, bar);
@@ -194,7 +200,18 @@ public sealed class FlyoutForm : Form
         {
             g.DrawString("—", font, fore, 242, y);
         }
-        g.DrawString(resetText, smallFont, dim, 84, y + 20);
+        g.DrawString(resetText, smallFont, dim, 84, y + 24);
+    }
+
+    private static readonly string IconFontFamily = ResolveIconFontFamily();
+
+    private static string ResolveIconFontFamily()
+    {
+        using var installed = new InstalledFontCollection();
+        var names = installed.Families.Select(f => f.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (names.Contains("Segoe Fluent Icons")) return "Segoe Fluent Icons";
+        if (names.Contains("Segoe MDL2 Assets")) return "Segoe MDL2 Assets";
+        return "Segoe UI";
     }
 
     private static bool IsDarkMode()

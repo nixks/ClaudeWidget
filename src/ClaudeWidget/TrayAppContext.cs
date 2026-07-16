@@ -24,7 +24,8 @@ public sealed class TrayAppContext : ApplicationContext
     public TrayAppContext()
     {
         _settings = Settings.Load(Settings.DefaultPath);
-        _client = new UsageClient(new HttpClient { Timeout = TimeSpan.FromSeconds(20) }, new CredentialsReader());
+        var handler = new SocketsHttpHandler { PooledConnectionLifetime = TimeSpan.FromMinutes(5) };
+        _client = new UsageClient(new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(20) }, new CredentialsReader());
         _notifier = new ThresholdNotifier(_settings.WarnThreshold, _settings.CriticalThreshold);
 
         var menu = new ContextMenuStrip();

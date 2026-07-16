@@ -120,7 +120,7 @@ public sealed class TrayIcon : IDisposable
             uID = 1,
             uFlags = flags,
             uCallbackMessage = TrayCallbackMessage,
-            hIcon = _icon?.Handle ?? IntPtr.Zero,
+            hIcon = (flags & NIF_ICON) != 0 ? (_icon?.Handle ?? IntPtr.Zero) : IntPtr.Zero,
             szTip = _text,
             szInfo = "",
             szInfoTitle = "",
