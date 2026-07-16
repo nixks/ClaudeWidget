@@ -20,12 +20,25 @@ public sealed class Settings
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
         "ClaudeWidget", "settings.json");
 
+    private const int MinPollIntervalSeconds = 5;
+    private const int MaxPollIntervalSeconds = 3600;
+
     public static Settings Load(string path)
     {
         try
         {
-            if (!File.Exists(path)) return new Settings();
-            return JsonSerializer.Deserialize<Settings>(File.ReadAllText(path), JsonOptions) ?? new Settings();
+            Settings result;
+            if (!File.Exists(path))
+            {
+                result = new Settings();
+            }
+            else
+            {
+                result = JsonSerializer.Deserialize<Settings>(File.ReadAllText(path), JsonOptions) ?? new Settings();
+            }
+
+            result.PollIntervalSeconds = Math.Clamp(result.PollIntervalSeconds, MinPollIntervalSeconds, MaxPollIntervalSeconds);
+            return result;
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException or JsonException)
         {

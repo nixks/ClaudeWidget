@@ -67,4 +67,20 @@ public class ThresholdNotifierTests
         var n = new ThresholdNotifier(80, 95);
         Assert.NotNull(n.Update(Snap(85)));
     }
+
+    [Fact]
+    public void NullResetFromProbeFallbackDoesNotReArmDuplicateToast()
+    {
+        var n = new ThresholdNotifier(80, 95);
+        // Fires warn on the usage endpoint with a known reset time.
+        Assert.NotNull(n.Update(Snap(85, Reset1)));
+        // A poll falls back to the probe, which lacks the reset header (null).
+        // This must NOT be treated as a window change and must NOT re-fire.
+        Assert.Null(n.Update(Snap(85, null)));
+        // Flipping back to the original (non-null) reset at the same percent
+        // must also NOT re-fire — it's the same window, not a genuine reset.
+        Assert.Null(n.Update(Snap(85, Reset1)));
+        // A genuinely different non-null reset still re-arms as before.
+        Assert.NotNull(n.Update(Snap(85, Reset2)));
+    }
 }

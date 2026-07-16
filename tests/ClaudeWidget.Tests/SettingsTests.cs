@@ -46,4 +46,20 @@ public class SettingsTests
         new Settings().Save(path);
         Assert.Contains("\"pollIntervalSeconds\"", File.ReadAllText(path));
     }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-5)]
+    [InlineData(999999)]
+    public void OutOfRangePollIntervalIsClamped(int rawValue)
+    {
+        var path = TempPath();
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllText(path, $"{{\"pollIntervalSeconds\": {rawValue}}}");
+
+        var loaded = Settings.Load(path);
+
+        Assert.InRange(loaded.PollIntervalSeconds, 5, 3600);
+        Assert.NotEqual(rawValue, loaded.PollIntervalSeconds);
+    }
 }

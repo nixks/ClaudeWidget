@@ -20,7 +20,10 @@ public sealed class ThresholdNotifier
 
     public string? Update(UsageSnapshot snapshot)
     {
-        var windowChanged = _hasSeenSnapshot && _lastResetAt != snapshot.SessionResetsAtUtc;
+        var windowChanged = _hasSeenSnapshot
+            && _lastResetAt is { } prevReset
+            && snapshot.SessionResetsAtUtc is { } currReset
+            && prevReset != currReset;
         var sharpDrop = _hasSeenSnapshot && snapshot.SessionPercent < _lastPercent - SharpDropPoints;
         if (windowChanged || sharpDrop)
         {
@@ -28,7 +31,13 @@ public sealed class ThresholdNotifier
             _criticalFired = false;
         }
         _hasSeenSnapshot = true;
-        _lastResetAt = snapshot.SessionResetsAtUtc;
+        if (snapshot.SessionResetsAtUtc is not null)
+        {
+            // Retain the last known non-null reset timestamp so a temporary gap
+            // (e.g. probe fallback missing the reset header) doesn't erase our
+            // ability to detect a genuine window change once a reset reappears.
+            _lastResetAt = snapshot.SessionResetsAtUtc;
+        }
         _lastPercent = snapshot.SessionPercent;
 
         var pct = Math.Round(snapshot.SessionPercent);
