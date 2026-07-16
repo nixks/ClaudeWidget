@@ -11,6 +11,12 @@ public sealed class FlyoutForm : Form
     private bool _stale;
     private bool _authError;
 
+    private bool _dragging;
+    private Point _dragStartScreenPoint;
+    private Point _dragStartFormLocation;
+
+    public event Action<Point>? PositionChanged;
+
     private readonly Color _back;
     private readonly Color _fore;
     private readonly Color _dimFore;
@@ -30,7 +36,7 @@ public sealed class FlyoutForm : Form
         ShowInTaskbar = false;
         TopMost = true;
         StartPosition = FormStartPosition.Manual;
-        ClientSize = new Size(340, 160);
+        ClientSize = new Size(340, 170);
         BackColor = _back;
         DoubleBuffered = true;
     }
@@ -45,12 +51,42 @@ public sealed class FlyoutForm : Form
         Invalidate();
     }
 
-    public void ShowNearTray()
+    public void ShowNearTray(Point? savedPosition = null)
     {
         var area = Screen.PrimaryScreen!.WorkingArea;
-        Location = new Point(area.Right - Width - 8, area.Bottom - Height - 8);
+        var defaultLocation = new Point(area.Right - Width - 8, area.Bottom - Height - 8);
+        Location = savedPosition is { } p && SystemInformation.VirtualScreen.Contains(new Rectangle(p, Size))
+            ? p
+            : defaultLocation;
         Show();
         Activate();
+    }
+
+    protected override void OnMouseDown(MouseEventArgs e)
+    {
+        base.OnMouseDown(e);
+        if (e.Button != MouseButtons.Left) return;
+        _dragging = true;
+        _dragStartScreenPoint = Cursor.Position;
+        _dragStartFormLocation = Location;
+    }
+
+    protected override void OnMouseMove(MouseEventArgs e)
+    {
+        base.OnMouseMove(e);
+        if (!_dragging) return;
+        var current = Cursor.Position;
+        Location = new Point(
+            _dragStartFormLocation.X + (current.X - _dragStartScreenPoint.X),
+            _dragStartFormLocation.Y + (current.Y - _dragStartScreenPoint.Y));
+    }
+
+    protected override void OnMouseUp(MouseEventArgs e)
+    {
+        base.OnMouseUp(e);
+        if (!_dragging) return;
+        _dragging = false;
+        PositionChanged?.Invoke(Location);
     }
 
     protected override void OnDeactivate(EventArgs e)
