@@ -10,6 +10,9 @@ public class ThresholdNotifierTests
     private static UsageSnapshot Snap(double pct, DateTimeOffset? resetsAt = null)
         => new(pct, resetsAt ?? Reset1, null, null, DateTimeOffset.UtcNow, UsageSource.UsageEndpoint);
 
+    private static UsageSnapshot SnapWithNoReset(double pct)
+        => new(pct, null, null, null, DateTimeOffset.UtcNow, UsageSource.Probe);
+
     [Fact]
     public void FiresWarnOnceOnCrossing()
     {
@@ -76,7 +79,7 @@ public class ThresholdNotifierTests
         Assert.NotNull(n.Update(Snap(85, Reset1)));
         // A poll falls back to the probe, which lacks the reset header (null).
         // This must NOT be treated as a window change and must NOT re-fire.
-        Assert.Null(n.Update(Snap(85, null)));
+        Assert.Null(n.Update(SnapWithNoReset(85)));
         // Flipping back to the original (non-null) reset at the same percent
         // must also NOT re-fire — it's the same window, not a genuine reset.
         Assert.Null(n.Update(Snap(85, Reset1)));
