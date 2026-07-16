@@ -15,6 +15,9 @@ public sealed class FlyoutForm : Form
     private Point _dragStartScreenPoint;
     private Point _dragStartFormLocation;
 
+    private bool _pinned;
+    private static readonly Rectangle PinRect = new(312, 8, 20, 20);
+
     public event Action<Point>? PositionChanged;
 
     private readonly Color _back;
@@ -66,6 +69,12 @@ public sealed class FlyoutForm : Form
     {
         base.OnMouseDown(e);
         if (e.Button != MouseButtons.Left) return;
+        if (PinRect.Contains(e.Location))
+        {
+            _pinned = !_pinned;
+            Invalidate();
+            return;
+        }
         _dragging = true;
         _dragStartScreenPoint = Cursor.Position;
         _dragStartFormLocation = Location;
@@ -91,6 +100,7 @@ public sealed class FlyoutForm : Form
 
     protected override void OnDeactivate(EventArgs e)
     {
+        if (_pinned) return;
         base.OnDeactivate(e);
         Hide();
     }
@@ -110,6 +120,11 @@ public sealed class FlyoutForm : Form
 
         g.DrawRectangle(borderPen, 0, 0, Width - 1, Height - 1);
         g.DrawString("Claude Usage", titleFont, fore, 16, 12);
+
+        using var iconFont = new Font("Segoe MDL2 Assets", 11f);
+        using var iconFormat = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
+        var pinGlyph = _pinned ? ((char)0xE840).ToString() : ((char)0xE718).ToString();
+        g.DrawString(pinGlyph, iconFont, fore, PinRect, iconFormat);
 
         if (_authError)
         {
