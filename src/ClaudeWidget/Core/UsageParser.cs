@@ -30,6 +30,35 @@ public static class UsageParser
 
     public static double NormalizePercent(double raw) => raw <= 1.0 ? raw * 100.0 : raw;
 
+    public static UsageSnapshot? ParseProbeHeaders(Func<string, string?> header, DateTimeOffset nowUtc)
+    {
+        var sessionUtil = ParseInvariantDouble(header("anthropic-ratelimit-unified-5h-utilization"));
+        if (sessionUtil is null) return null;
+        var sessionReset = ParseResetValue(header("anthropic-ratelimit-unified-5h-reset"));
+        var weeklyUtil = ParseInvariantDouble(header("anthropic-ratelimit-unified-7d-utilization"));
+        var weeklyReset = ParseResetValue(header("anthropic-ratelimit-unified-7d-reset"));
+        return new UsageSnapshot(
+            NormalizePercent(sessionUtil.Value),
+            sessionReset,
+            weeklyUtil is null ? null : NormalizePercent(weeklyUtil.Value),
+            weeklyReset,
+            nowUtc,
+            UsageSource.Probe);
+    }
+
+    private static double? ParseInvariantDouble(string? s)
+        => double.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out var d) ? d : null;
+
+    private static DateTimeOffset? ParseResetValue(string? s)
+    {
+        if (string.IsNullOrWhiteSpace(s)) return null;
+        if (long.TryParse(s, NumberStyles.Integer, CultureInfo.InvariantCulture, out var unix))
+            return DateTimeOffset.FromUnixTimeSeconds(unix);
+        return DateTimeOffset.TryParse(s, CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal, out var dto)
+            ? dto
+            : null;
+    }
+
     private static bool TryGetWindow(JsonElement root, string name, out double percent, out DateTimeOffset? resetsAt)
     {
         percent = 0;
