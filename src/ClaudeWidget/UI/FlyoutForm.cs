@@ -18,6 +18,10 @@ public sealed class FlyoutForm : Form
     private bool _pinned;
     private static readonly Rectangle PinRect = new(312, 8, 20, 20);
 
+    private bool _refreshing;
+    private static readonly Rectangle RefreshRect = new(288, 8, 20, 20);
+
+    public event Action? RefreshRequested;
     public event Action<Point>? PositionChanged;
 
     private readonly Color _back;
@@ -54,6 +58,12 @@ public sealed class FlyoutForm : Form
         Invalidate();
     }
 
+    public void SetRefreshing(bool value)
+    {
+        _refreshing = value;
+        Invalidate();
+    }
+
     public void ShowNearTray(Point? savedPosition = null)
     {
         var area = Screen.PrimaryScreen!.WorkingArea;
@@ -69,6 +79,11 @@ public sealed class FlyoutForm : Form
     {
         base.OnMouseDown(e);
         if (e.Button != MouseButtons.Left) return;
+        if (RefreshRect.Contains(e.Location))
+        {
+            if (!_refreshing) RefreshRequested?.Invoke();
+            return;
+        }
         if (PinRect.Contains(e.Location))
         {
             _pinned = !_pinned;
@@ -125,6 +140,9 @@ public sealed class FlyoutForm : Form
         using var iconFormat = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
         var pinGlyph = _pinned ? ((char)0xE840).ToString() : ((char)0xE718).ToString();
         g.DrawString(pinGlyph, iconFont, fore, PinRect, iconFormat);
+
+        var refreshColor = _refreshing ? dim : fore;
+        g.DrawString(((char)0xE72C).ToString(), iconFont, refreshColor, RefreshRect, iconFormat);
 
         if (_authError)
         {
