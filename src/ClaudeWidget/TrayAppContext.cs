@@ -97,6 +97,10 @@ public sealed class TrayAppContext : ApplicationContext
                     break;
             }
         }
+        catch (Exception)
+        {
+            _consecutiveFailures++;
+        }
         finally
         {
             _polling = false;
@@ -157,6 +161,8 @@ public sealed class TrayAppContext : ApplicationContext
     protected override void ExitThreadCore()
     {
         _tray.Visible = false;
+        _tray.Icon?.Dispose();
+        _tray.ContextMenuStrip?.Dispose();
         _tray.Dispose();
         _timer.Dispose();
         _flyout.Dispose();
