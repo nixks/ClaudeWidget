@@ -7,7 +7,7 @@ public sealed class TrayAppContext : ApplicationContext
 {
     private static readonly int[] PollChoices = [30, 60, 120, 300];
 
-    private readonly NotifyIcon _tray;
+    private readonly TrayIcon _tray;
     private readonly System.Windows.Forms.Timer _timer;
     private readonly UsageClient _client;
     private readonly Settings _settings;
@@ -53,11 +53,18 @@ public sealed class TrayAppContext : ApplicationContext
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("Exit", null, (_, _) => ExitThread());
 
-        _tray = new NotifyIcon { ContextMenuStrip = menu, Visible = true };
+        _tray = new TrayIcon { ContextMenuStrip = menu };
         _tray.MouseClick += (_, e) =>
         {
             if (e.Button == MouseButtons.Left) ToggleFlyout();
         };
+        _flyout.PositionChanged += p =>
+        {
+            _settings.FlyoutX = p.X;
+            _settings.FlyoutY = p.Y;
+            _settings.Save(Settings.DefaultPath);
+        };
+        _flyout.RefreshRequested += async () => await PollAsync();
         UpdateTray();
 
         _timer = new System.Windows.Forms.Timer { Interval = _settings.PollIntervalSeconds * 1000 };
@@ -72,6 +79,7 @@ public sealed class TrayAppContext : ApplicationContext
     {
         if (_polling) return;
         _polling = true;
+        _flyout.SetRefreshing(true);
         try
         {
             var result = await _client.FetchAsync();
@@ -84,9 +92,7 @@ public sealed class TrayAppContext : ApplicationContext
                     var message = _notifier.Update(_snapshot!);
                     if (message is not null)
                     {
-                        _tray.BalloonTipTitle = "Claude usage";
-                        _tray.BalloonTipText = message;
-                        _tray.ShowBalloonTip(5000);
+                        _tray.ShowBalloonTip(5000, "Claude usage", message);
                     }
                     break;
                 case FetchStatus.AuthError:
@@ -104,6 +110,7 @@ public sealed class TrayAppContext : ApplicationContext
         finally
         {
             _polling = false;
+            _flyout.SetRefreshing(false);
             UpdateTray();
         }
     }
@@ -133,7 +140,7 @@ public sealed class TrayAppContext : ApplicationContext
         else
         {
             _flyout.UpdateFrom(_snapshot, IsStale, _authError);
-            _flyout.ShowNearTray();
+            _flyout.ShowNearTray(_settings.FlyoutX is int x && _settings.FlyoutY is int y ? new Point(x, y) : null);
         }
     }
 
@@ -160,7 +167,6 @@ public sealed class TrayAppContext : ApplicationContext
 
     protected override void ExitThreadCore()
     {
-        _tray.Visible = false;
         _tray.Icon?.Dispose();
         _tray.ContextMenuStrip?.Dispose();
         _tray.Dispose();
