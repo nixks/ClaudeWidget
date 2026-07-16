@@ -137,7 +137,7 @@ Pure class: given previous and current session %, plus the session reset timesta
 { "pollIntervalSeconds": 60, "warnThreshold": 80, "criticalThreshold": 95, "startWithWindows": false }
 ```
 
-Right-click menu: **Refresh now** · **Start with Windows** (checkbox → `Autostart` writes/removes `HKCU\Software\Microsoft\Windows\CurrentVersion\Run\ClaudeWidget`) · **Poll interval** submenu (30 s / 60 s / 2 min / 5 min) · **Exit**. Settings file changes take effect immediately; file is written on every change.
+Right-click menu: **Refresh now** · **Start with Windows** (checkbox → `Autostart` writes/removes `HKCU\Software\Microsoft\Windows\CurrentVersion\Run\ClaudeWidget`) · **Poll interval** submenu (30 s / 60 s / 2 min / 5 min) · **Exit**. Changes made via the menu apply immediately and are persisted to the file on every change; the file is read only at startup (no file watcher — hand-editing it requires a restart).
 
 ## Error handling
 
