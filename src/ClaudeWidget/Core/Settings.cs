@@ -15,6 +15,8 @@ public sealed class Settings
     public double WarnThreshold { get; set; } = 80;
     public double CriticalThreshold { get; set; } = 95;
     public bool StartWithWindows { get; set; }
+    public int? FlyoutX { get; set; }
+    public int? FlyoutY { get; set; }
 
     public static string DefaultPath => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),

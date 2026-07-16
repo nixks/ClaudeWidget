@@ -62,4 +62,19 @@ public class SettingsTests
         Assert.InRange(loaded.PollIntervalSeconds, 5, 3600);
         Assert.NotEqual(rawValue, loaded.PollIntervalSeconds);
     }
+
+    [Fact]
+    public void FlyoutPositionDefaultsToNullAndRoundTrips()
+    {
+        var path = TempPath();
+        var defaults = Settings.Load(path);
+        Assert.Null(defaults.FlyoutX);
+        Assert.Null(defaults.FlyoutY);
+
+        var s = new Settings { FlyoutX = 120, FlyoutY = 340 };
+        s.Save(path);
+        var loaded = Settings.Load(path);
+        Assert.Equal(120, loaded.FlyoutX);
+        Assert.Equal(340, loaded.FlyoutY);
+    }
 }
