@@ -4,8 +4,6 @@ Windows system-tray widget showing your Claude rate-limit usage at a glance:
 session (5-hour window) % on the icon, with a click flyout showing session and
 weekly usage bars and reset countdowns.
 
-Inspired by [clawdometer-eink](https://github.com/nsyll/clawdometer-eink).
-
 ## Requirements
 
 - Windows 10/11
@@ -34,5 +32,4 @@ The published `publish\ClaudeWidget.exe` is fully self-contained.
 
 Polls Anthropic's OAuth usage endpoint (no tokens consumed). If that fails, it
 falls back to a minimal probe request and reads the
-`anthropic-ratelimit-unified-*` response headers — the approach used by
-clawdometer-eink.
+`anthropic-ratelimit-unified-*` response headers.
