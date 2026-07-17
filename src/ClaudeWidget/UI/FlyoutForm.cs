@@ -1,6 +1,7 @@
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Drawing.Text;
+using System.Runtime.InteropServices;
 using ClaudeWidget.Core;
 using Microsoft.Win32;
 
@@ -8,6 +9,22 @@ namespace ClaudeWidget.UI;
 
 public sealed class FlyoutForm : Form
 {
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetForegroundWindow();
+
+    [DllImport("user32.dll")]
+    private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int x, int y, int cx, int cy, uint uFlags);
+
+    private static readonly IntPtr HwndTopmost = new(-1);
+    private const uint SwpNoMoveSizeActivate = 0x0001 | 0x0002 | 0x0010;
+
+    // A click on this TopMost borderless window can trigger a spurious OnDeactivate right
+    // before the click itself is delivered (observed specifically on the pin/refresh buttons,
+    // which sit close to the screen edge where the flyout is anchored). Hiding synchronously
+    // on every deactivation closed the flyout before its own click handler ever ran. Debounce
+    // by re-checking who actually holds the foreground a moment later.
+    private readonly System.Windows.Forms.Timer _hideDebounceTimer = new() { Interval = 150 };
+
     private UsageSnapshot? _snapshot;
     private bool _stale;
     private bool _authError;
@@ -18,11 +35,13 @@ public sealed class FlyoutForm : Form
 
     private const int BoxPadding = 16;
 
+    private static readonly Color PinActiveColor = Color.FromArgb(59, 130, 246);
+
     private bool _pinned;
-    private static readonly Rectangle PinRect = new(322, 12, 22, 22);
+    private static readonly Rectangle PinRect = new(322, 17, 22, 22);
 
     private bool _refreshing;
-    private static readonly Rectangle RefreshRect = new(288, 12, 22, 22);
+    private static readonly Rectangle RefreshRect = new(288, 17, 22, 22);
 
     public event Action? RefreshRequested;
     public event Action<Point>? PositionChanged;
@@ -49,9 +68,21 @@ public sealed class FlyoutForm : Form
         ClientSize = new Size(360, 210);
         BackColor = _back;
         DoubleBuffered = true;
+
+        _hideDebounceTimer.Tick += (_, _) =>
+        {
+            _hideDebounceTimer.Stop();
+            if (!_pinned && GetForegroundWindow() != Handle) Hide();
+        };
     }
 
     protected override bool ShowWithoutActivation => false;
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing) _hideDebounceTimer.Dispose();
+        base.Dispose(disposing);
+    }
 
     public void UpdateFrom(UsageSnapshot? snapshot, bool stale, bool authError)
     {
@@ -90,6 +121,7 @@ public sealed class FlyoutForm : Form
         if (PinRect.Contains(e.Location))
         {
             _pinned = !_pinned;
+            if (_pinned) _hideDebounceTimer.Stop();
             Invalidate();
             return;
         }
@@ -118,9 +150,18 @@ public sealed class FlyoutForm : Form
 
     protected override void OnDeactivate(EventArgs e)
     {
-        if (_pinned) return;
         base.OnDeactivate(e);
-        Hide();
+        if (_pinned)
+        {
+            // TopMost=true only guarantees staying above non-topmost windows; the OS still
+            // drops an unfocused topmost window behind other topmost/foreground windows once
+            // it loses activation. Re-assert the frontmost position without stealing focus
+            // back (SWP_NOACTIVATE), so a pinned flyout actually stays visible on top.
+            SetWindowPos(Handle, HwndTopmost, 0, 0, 0, 0, SwpNoMoveSizeActivate);
+            return;
+        }
+        _hideDebounceTimer.Stop();
+        _hideDebounceTimer.Start();
     }
 
     protected override void OnPaint(PaintEventArgs e)
@@ -128,6 +169,7 @@ public sealed class FlyoutForm : Form
         base.OnPaint(e);
         var g = e.Graphics;
         g.SmoothingMode = SmoothingMode.AntiAlias;
+        g.TextRenderingHint = TextRenderingHint.ClearTypeGridFit;
 
         using var titleFont = new Font("Segoe UI Semibold", 11f);
         using var font = new Font("Segoe UI", 9.5f);
@@ -140,9 +182,20 @@ public sealed class FlyoutForm : Form
         g.DrawString("Claude Usage", titleFont, fore, BoxPadding, 14);
 
         using var iconFont = new Font(IconFontFamily, 12f);
-        using var iconFormat = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
+        // NoClip: the icon font's natural line height is taller than the 22px hit-test box,
+        // and DrawString otherwise clips glyphs to their layout rectangle - cropping a
+        // sliver off the top/bottom of the pin and refresh glyphs.
+        using var iconFormat = new StringFormat
+        {
+            Alignment = StringAlignment.Center,
+            LineAlignment = StringAlignment.Center,
+            FormatFlags = StringFormatFlags.NoClip,
+        };
+        // The pin/unpin glyphs are too close in shape to read as a state change at 12pt, so
+        // color carries the "is it pinned" signal instead of relying on the glyph alone.
         var pinGlyph = _pinned ? ((char)0xE840).ToString() : ((char)0xE718).ToString();
-        g.DrawString(pinGlyph, iconFont, fore, PinRect, iconFormat);
+        using var pinBrush = new SolidBrush(_pinned ? PinActiveColor : _fore);
+        g.DrawString(pinGlyph, iconFont, pinBrush, PinRect, iconFormat);
 
         var refreshColor = _refreshing ? dim : fore;
         g.DrawString(((char)0xE72C).ToString(), iconFont, refreshColor, RefreshRect, iconFormat);
@@ -181,7 +234,10 @@ public sealed class FlyoutForm : Form
         Font font, Font smallFont, Brush fore, Brush dim)
     {
         g.DrawString(label, font, fore, BoxPadding, y);
-        var bar = new Rectangle(84, y + 5, 150, 14);
+        const int barX = 100;
+        const int barWidth = 136;
+        const int percentX = barX + barWidth + 4;
+        var bar = new Rectangle(barX, y + 10, barWidth, 14);
         using (var back = new SolidBrush(_barBack))
         {
             g.FillRectangle(back, bar);
@@ -194,13 +250,13 @@ public sealed class FlyoutForm : Form
                 using var fill = new SolidBrush(IconRenderer.ColorFor(percent, stale: false, authError: false));
                 g.FillRectangle(fill, new Rectangle(bar.X, bar.Y, width, bar.Height));
             }
-            g.DrawString($"{percent:0}%", font, fore, 242, y);
+            g.DrawString($"{percent:0}%", font, fore, percentX, y);
         }
         else
         {
-            g.DrawString("—", font, fore, 242, y);
+            g.DrawString("—", font, fore, percentX, y);
         }
-        g.DrawString(resetText, smallFont, dim, 84, y + 24);
+        g.DrawString(resetText, smallFont, dim, barX, y + 29);
     }
 
     private static readonly string IconFontFamily = ResolveIconFontFamily();

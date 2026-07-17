@@ -11,26 +11,37 @@ public sealed class CredentialsReader
             Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
             ".claude", ".credentials.json");
 
+    private const int MaxAttempts = 3;
+    private const int RetryDelayMs = 25;
+
     public string? ReadAccessToken()
     {
-        try
+        for (var attempt = 1; attempt <= MaxAttempts; attempt++)
         {
-            if (!File.Exists(_path)) return null;
-            using var doc = JsonDocument.Parse(File.ReadAllText(_path));
-            if (doc.RootElement.ValueKind == JsonValueKind.Object &&
-                doc.RootElement.TryGetProperty("claudeAiOauth", out var oauth) &&
-                oauth.ValueKind == JsonValueKind.Object &&
-                oauth.TryGetProperty("accessToken", out var token) &&
-                token.ValueKind == JsonValueKind.String)
+            try
             {
-                var value = token.GetString();
-                return string.IsNullOrWhiteSpace(value) ? null : value;
+                if (!File.Exists(_path)) return null;
+                using var doc = JsonDocument.Parse(File.ReadAllText(_path));
+                if (doc.RootElement.ValueKind == JsonValueKind.Object &&
+                    doc.RootElement.TryGetProperty("claudeAiOauth", out var oauth) &&
+                    oauth.ValueKind == JsonValueKind.Object &&
+                    oauth.TryGetProperty("accessToken", out var token) &&
+                    token.ValueKind == JsonValueKind.String)
+                {
+                    var value = token.GetString();
+                    return string.IsNullOrWhiteSpace(value) ? null : value;
+                }
+                return null;
             }
-            return null;
+            // The credentials file can be briefly locked or mid-write while Claude Code
+            // refreshes the token. Retry a couple of times before giving up so that doesn't
+            // get reported to the user as "not signed in".
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException or JsonException)
+            {
+                if (attempt == MaxAttempts) return null;
+                Thread.Sleep(RetryDelayMs);
+            }
         }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException or JsonException)
-        {
-            return null;
-        }
+        return null;
     }
 }

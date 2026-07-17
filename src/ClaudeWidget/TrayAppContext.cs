@@ -16,10 +16,13 @@ public sealed class TrayAppContext : ApplicationContext
     private readonly ToolStripMenuItem _autostartItem;
     private readonly ToolStripMenuItem _intervalMenu;
 
+    private const int InitialRetrySeconds = 3;
+
     private UsageSnapshot? _snapshot;
     private int _consecutiveFailures;
     private bool _authError;
     private bool _polling;
+    private int _retrySeconds;
 
     public TrayAppContext()
     {
@@ -90,6 +93,7 @@ public sealed class TrayAppContext : ApplicationContext
                     _snapshot = result.Snapshot;
                     _consecutiveFailures = 0;
                     _authError = false;
+                    ResetRetry();
                     var message = _notifier.Update(_snapshot!);
                     if (message is not null)
                     {
@@ -98,15 +102,18 @@ public sealed class TrayAppContext : ApplicationContext
                     break;
                 case FetchStatus.AuthError:
                     _authError = true;
+                    ScheduleRetry();
                     break;
                 case FetchStatus.Failure:
                     _consecutiveFailures++;
+                    ScheduleRetry();
                     break;
             }
         }
         catch (Exception)
         {
             _consecutiveFailures++;
+            ScheduleRetry();
         }
         finally
         {
@@ -114,6 +121,25 @@ public sealed class TrayAppContext : ApplicationContext
             _flyout.SetRefreshing(false);
             UpdateTray();
         }
+    }
+
+    // A failed poll (including the very first one at startup) is often transient - e.g. the
+    // credentials file is briefly locked while Claude Code rewrites it, or the very first HTTPS
+    // request stalls. Waiting out the full configured poll interval before retrying made that
+    // transient state visible to the user for far too long, so back off quickly instead and
+    // ramp back up to the configured interval once a poll succeeds.
+    private void ScheduleRetry()
+    {
+        _retrySeconds = _retrySeconds == 0
+            ? InitialRetrySeconds
+            : Math.Min(_retrySeconds * 2, _settings.PollIntervalSeconds);
+        _timer.Interval = _retrySeconds * 1000;
+    }
+
+    private void ResetRetry()
+    {
+        _retrySeconds = 0;
+        _timer.Interval = _settings.PollIntervalSeconds * 1000;
     }
 
     private void UpdateTray()
@@ -159,7 +185,7 @@ public sealed class TrayAppContext : ApplicationContext
         var seconds = (int)item.Tag!;
         _settings.PollIntervalSeconds = seconds;
         _settings.Save(Settings.DefaultPath);
-        _timer.Interval = seconds * 1000;
+        ResetRetry();
         foreach (ToolStripMenuItem other in _intervalMenu.DropDownItems)
         {
             other.Checked = Equals(other.Tag, seconds);
